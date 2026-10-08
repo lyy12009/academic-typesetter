@@ -11,12 +11,19 @@ from docx.enum.style import WD_STYLE_TYPE
 
 st.set_page_config(page_title="學術排版自動化工具鏈", layout="wide")
 
+# 側邊欄導航與快捷連結
 st.sidebar.title("🛠️ 學術排版工具選單")
 app_mode = st.sidebar.selectbox("請選擇要使用的工具：", [
     "1. Word 結構萃取器 (Extractor)",
     "2. 橫排決定論編譯器 (Horizontal)",
     "3. 直排決定論編譯器 (Vertical)"
 ])
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎨 樣式合約產生器 (GUI)")
+st.sidebar.markdown("需要調整字型、字級或編號格式嗎？")
+st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12009.github.io/EssayFormatting/)")
+
 
 # ==========================================
 # 模組一：Word 結構萃取器
@@ -185,6 +192,7 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
 if app_mode == "2. 橫排決定論編譯器 (Horizontal)":
     st.title("📚 橫排決定論編譯器 (Horizontal)")
     st.markdown("結合 JSON 樣式合約與 Markdown 文本，瞬間生成標準橫排學術 Word 檔。")
+    st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -217,6 +225,7 @@ if app_mode == "2. 橫排決定論編譯器 (Horizontal)":
 if app_mode == "3. 直排決定論編譯器 (Vertical)":
     st.title("📜 直排決定論編譯器 (Vertical)")
     st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
+    st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -225,7 +234,7 @@ if app_mode == "3. 直排決定論編譯器 (Vertical)":
         md_input = st.text_area("2. 貼上 Markdown 文本：", height=300)
         
     if st.button("🚀 執行直排編譯", type="primary"):
-        if not json_input.setItem if False else not json_input.strip() or not md_input.strip():
+        if not json_input.strip() or not md_input.strip():
             st.error("JSON 合約與 Markdown 文本皆不可為空！")
         else:
             try:
