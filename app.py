@@ -16,14 +16,14 @@ st.sidebar.title("🛠️ 學術排版工具選單")
 app_mode = st.sidebar.selectbox("請選擇要使用的工具：", [
     "📖 使用說明與 SOP (新手必看)",
     "1. Word 結構萃取器 (Extractor)",
-    "2. 橫排決定論編譯器 (Horizontal)",
-    "3. 直排決定論編譯器 (Vertical)"
+    "2. 橫向排版格式編譯器 (Horizontal)",
+    "3. 直向排版格式編譯器 (Vertical)"
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎨 樣式合約產生器 (GUI)")
-st.sidebar.markdown("需要調整字型、字級或編號格式嗎？")
-st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12009.github.io/EssayFormatting/)")
+st.sidebar.markdown("### 🎨 排版格式產生器 (GUI)")
+st.sidebar.markdown("若需要調整字型、字級或編號格式。")
+st.sidebar.markdown("[👉 點擊開啟線上 CSS 排版格式產生器](https://lyy12009.github.io/EssayFormatting/)")
 
 
 # ==========================================
@@ -31,7 +31,7 @@ st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12
 # ==========================================
 if app_mode == "📖 使用說明與 SOP (新手必看)":
     st.title("🎓 跨維度學術排版自動化系統：操作手冊")
-    st.markdown("本系統透過「關注點分離」與「決定論編譯器」，徹底消除學生在 Word 手動調整格式的無效勞動。請嚴格遵循以下四個步驟完成高品質論文與報告！")
+    st.markdown("請嚴格遵循以下四個步驟完成高品質論文與報告！")
     
     st.markdown("---")
     
