@@ -16,18 +16,18 @@ st.sidebar.title("🛠️ 學術排版工具選單")
 app_mode = st.sidebar.selectbox("請選擇要使用的工具：", [
     "📖 使用說明與 SOP (新手必看)",
     "1. Word 結構萃取器 (Extractor)",
-    "2. 橫向排版編譯器 (Horizontal)",
-    "3. 直向排版編譯器 (Vertical)"
+    "2. 橫排決定論編譯器 (Horizontal)",
+    "3. 直排決定論編譯器 (Vertical)"
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎨 排版格式樣式產生器 (GUI)")
+st.sidebar.markdown("### 🎨 樣式合約產生器 (GUI)")
 st.sidebar.markdown("需要調整字型、字級或編號格式嗎？")
-st.sidebar.markdown("[👉 點擊開啟線上 CSS 排版格式樣式產生器](https://lyy12009.github.io/EssayFormatting/)")
+st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12009.github.io/EssayFormatting/)")
 
 
 # ==========================================
-# 共用編譯核心函式
+# 共用編譯核心函式 (含引文 Quote 支援)
 # ==========================================
 def parse_hex_color(hex_str):
     hex_str = hex_str.lstrip('#')
@@ -46,11 +46,14 @@ def get_or_create_style(doc, style_name):
 def inject_style_contract(doc, json_styles):
     style_mappings = {
         "h1": "Heading 1", "h2": "Heading 2", "h3": "Heading 3",
-        "body": "Normal", "olist": "Academic OList", "ulist": "Academic UList"
+        "body": "Normal", "olist": "Academic OList", "ulist": "Academic UList",
+        "quote": "Quote" # 映射 Word 內建引文樣式
     }
     for json_key, word_style_name in style_mappings.items():
-        if json_key not in json_styles: continue
-        contract = json_styles[json_key]
+        if json_key not in json_styles and json_key != "quote": continue
+        
+        # 若合約沒特別定義 quote，就預設使用 body 的字型大小但取消縮排並左右內縮
+        contract = json_styles.get(json_key, json_styles.get("body", {}))
         style_obj = get_or_create_style(doc, word_style_name)
         style_obj.paragraph_format.alignment = get_alignment(contract.get("align", "left"))
         
@@ -60,6 +63,11 @@ def inject_style_contract(doc, json_styles):
                 style_obj.paragraph_format.first_line_indent = Pt(indent_chars * contract.get("size", 13))
             else:
                 style_obj.paragraph_format.first_line_indent = Pt(0)
+        elif json_key == "quote":
+            # 塊狀引文：取消首行縮排，設定左右各內縮 24 點（約 0.85 公分）
+            style_obj.paragraph_format.first_line_indent = Pt(0)
+            style_obj.paragraph_format.left_indent = Pt(24)
+            style_obj.paragraph_format.right_indent = Pt(24)
         else:
             style_obj.paragraph_format.first_line_indent = Pt(0)
             
@@ -91,7 +99,7 @@ def get_numbering_prefix(level, counts, sys_type):
     return ""
 
 def compile_core(md_text, style_contract, num_sys, is_vertical=False):
-    doc = Document()
+    doc = docx.Document()
     if is_vertical:
         for section in doc.sections:
             sectPr = section._sectPr
@@ -112,7 +120,11 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
         match_ul = re.match(r'^(\s*)[-*]\s+(.*)', original_line)
         match_ol = re.match(r'^(\s*)(\d+)\.\s+(.*)', original_line)
         
-        if stripped_line.startswith('### '):
+        # 🟢 新增：辨識 Markdown 區塊引文 (>)
+        if stripped_line.startswith('> '):
+            quote_text = stripped_line.replace('> ', '', 1).strip()
+            doc.add_paragraph(quote_text, style='Quote')
+        elif stripped_line.startswith('### '):
             counts[2] += 1
             text = stripped_line.replace('### ', '', 1).strip()
             doc.add_paragraph(f"{get_numbering_prefix(3, counts, num_sys)}{text}", style='Heading 3')
@@ -146,56 +158,32 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
 # 頁面 0：新手必看使用說明與 SOP
 # ==========================================
 if app_mode == "📖 使用說明與 SOP (新手必看)":
-    st.title("🎓 跨維度學術排版半自動化系統：操作手冊")
-    st.markdown("本系統透過「內容編輯與排版格式分離」與「預設排版格式編譯器」，降低使用者在 Word 手動調整格式的複雜度。請嚴格遵循以下四個步驟完成論文與報告！")
+    st.title("🎓 跨維度學術排版自動化系統：操作手冊")
+    st.markdown("本系統透過「關注點分離」與「決定論編譯器」，徹底消除學生在 Word 手動調整格式的無效勞動。")
     
     st.markdown("---")
-    
     col_sop1, col_sop2 = st.columns(2)
-    
     with col_sop1:
         st.subheader("📌 步驟一：在 Word 進行極簡結構粗排")
         st.markdown("""
-        在 Word 中寫作時，只需專注於文章內容，並遵守以下原則：
-        1. **大綱標題：** 直接點擊 Word 上方樣式工具列的 **「標題一」、「標題二」、「標題三」**，絕對不要手動改字體大小來偽裝標題。
-        2. **項目與編號：** 使用內建的「項目符號」或「編號」，分層請按 `Tab` 鍵，不要手動打空白鍵對齊。
-        3. **文獻引用：** 內文可直接包含夾註（如 `(張春興, 1996)`）。
-        4. **圖表與標頭：** 保留圖表標頭文字（如 `圖1 研究架構`），實體物件最後再補。
-        5. **暫不處理：** 頁面、註腳、目錄、封面與文末書目此階段先不要理會。
+        1. **大綱標題：** 使用 Word 內建的「標題一、二、三」。
+        2. **項目清單：** 使用內建的項目符號與編號，按 `Tab` 降階。
+        3. **長引文：** 40字以上引文請在 Word 中套用「引文 (Quote)」樣式。
         """)
-        
-        st.subheader("📌 步驟二：將粗排過的 Word 檔案，透過 Word 結構萃取器轉出 Markdown")
-        st.markdown("""
-        1. 點擊左側選單進入 **「1. Word 結構萃取器」**。
-        2. 上傳你剛剛寫好的粗排 Word 檔案 (`.docx`)。
-        3. 系統會自動將 Word 內建的標題階層與清單轉譯成純淨的 **Markdown 文本**，將其複製備用。
-        """)
-
     with col_sop2:
-        st.subheader("📌 步驟三：透過排版格式樣式與編譯器自動排版")
+        st.subheader("📌 步驟二與三：萃取與決定論編譯")
         st.markdown("""
-        1. 前往 [線上 CSS 排版格式樣式產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本（如「中原應華碩論」），並複製產生的 **JSON 合約**。
-        2. 依文件性質選擇 **「2. 橫向排版編譯器」** 或 **「3. 直向排版編譯器」**。
-        3. 將 JSON 排版格式樣式貼入左側輸入框，將 Markdown 文本貼入右側輸入框。
-        4. 點擊按鈕執行編譯，即可下載排版完美的 Word 核心檔！
-        """)
-        
-        st.subheader("📌 步驟四：最終定稿與人工補漏")
-        st.markdown("""
-        1. **補圖表與頁下註：** 在下載的 Word 檔中手動補上圖片、表格與註腳。
-        2. **設定頁碼與目錄：** 插入頁碼並利用 Word 的「自動目錄」功能抓取標題。
-        3. **書目清單協作：** 將文末原始書目交由 AI 排序與校對 APA 格式，貼回後手動套用「懸掛縮排」。
-        4. **插入封面**，大功告成！
+        1. 使用 **結構萃取器** 將 Word 轉為 Markdown（長引文會自動帶有 `> `）。
+        2. 貼入合約與 Markdown，執行橫排或直排編譯下載 Word。
         """)
 
 
 # ==========================================
-# 模組一：Word 結構萃取器
+# 模組一：Word 結構萃取器 (含 Quote 萃取)
 # ==========================================
-if app_mode == "1. Word 結構萃取器 (Extractor)":
+elif app_mode == "1. Word 結構萃取器 (Extractor)":
     st.title("📄 Word 結構與清單降維萃取器")
-    st.markdown("將學生的 Word 粗排檔（僅點標題與清單）無情剝離視覺雜訊，轉譯為純淨的 Markdown 結構。")
-    st.info("💡 **操作提示**：請上傳在 Word 中已點好「標題一、二、三」與清單階層的 `.docx` 檔案。")
+    st.markdown("將學生的 Word 粗排檔無情剝離視覺雜訊，轉譯為純淨的 Markdown 結構（含大綱、清單與長引文）。")
     
     uploaded_file = st.file_uploader("請上傳學生的 Word 檔案 (.docx)", type=["docx"])
     
@@ -210,6 +198,12 @@ if app_mode == "1. Word 結構萃取器 (Extractor)":
             style_name = para.style.name
             pPr = para._element.pPr
             
+            # 🟢 新增：偵測 Word 的 Quote / 引文樣式，轉譯為 Markdown 的 >
+            if 'Quote' in style_name or '引文' in style_name:
+                markdown_lines.append(f"> {text}")
+                continue
+                
+            # 抓取清單 XML 階層
             if pPr is not None and pPr.numPr is not None:
                 ilvl_element = pPr.numPr.ilvl
                 level = int(ilvl_element.val) if ilvl_element is not None else 0
@@ -217,6 +211,7 @@ if app_mode == "1. Word 結構萃取器 (Extractor)":
                 markdown_lines.append(f"{indent_spaces}- {text}")
                 continue
                 
+            # 抓取標題階層
             if style_name.startswith('Heading') or style_name.startswith('標題'):
                 try:
                     level_str = re.search(r'\d+', style_name)
@@ -235,7 +230,7 @@ if app_mode == "1. Word 結構萃取器 (Extractor)":
 # ==========================================
 # 模組二：橫排決定論編譯器
 # ==========================================
-if app_mode == "2. 橫排決定論編譯器 (Horizontal)":
+elif app_mode == "2. 橫排決定論編譯器 (Horizontal)":
     st.title("📚 橫排決定論編譯器 (Horizontal)")
     st.markdown("結合 JSON 樣式合約與 Markdown 文本，瞬間生成標準橫排學術 Word 檔。")
     st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
@@ -268,7 +263,7 @@ if app_mode == "2. 橫排決定論編譯器 (Horizontal)":
 # ==========================================
 # 模組三：直排決定論編譯器
 # ==========================================
-if app_mode == "3. 直排決定論編譯器 (Vertical)":
+elif app_mode == "3. 直排決定論編譯器 (Vertical)":
     st.title("📜 直排決定論編譯器 (Vertical)")
     st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
     st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
