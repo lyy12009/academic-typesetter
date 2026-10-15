@@ -16,14 +16,14 @@ st.sidebar.title("🛠️ 學術排版工具選單")
 app_mode = st.sidebar.selectbox("請選擇要使用的工具：", [
     "📖 使用說明與 SOP (新手必看)",
     "1. Word 結構萃取器 (Extractor)",
-    "2. 橫排決定論編譯器 (Horizontal)",
-    "3. 直排決定論編譯器 (Vertical)"
+    "2. 橫向排版編譯器 (Horizontal)",
+    "3. 直向排版編譯器 (Vertical)"
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🎨 樣式合約產生器 (GUI)")
+st.sidebar.markdown("### 🎨 排版格式樣式產生器 (GUI)")
 st.sidebar.markdown("需要調整字型、字級或編號格式嗎？")
-st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12009.github.io/EssayFormatting/)")
+st.sidebar.markdown("[👉 點擊開啟線上 CSS 排版格式樣式產生器](https://lyy12009.github.io/EssayFormatting/)")
 
 
 # ==========================================
@@ -146,8 +146,8 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
 # 頁面 0：新手必看使用說明與 SOP
 # ==========================================
 if app_mode == "📖 使用說明與 SOP (新手必看)":
-    st.title("🎓 跨維度學術排版自動化系統：操作手冊")
-    st.markdown("本系統透過「關注點分離」與「決定論編譯器」，徹底消除學生在 Word 手動調整格式的無效勞動。請嚴格遵循以下四個步驟完成高品質論文與報告！")
+    st.title("🎓 跨維度學術排版半自動化系統：操作手冊")
+    st.markdown("本系統透過「內容編輯與排版格式分離」與「預設排版格式編譯器」，降低使用者在 Word 手動調整格式的複雜度。請嚴格遵循以下四個步驟完成論文與報告！")
     
     st.markdown("---")
     
@@ -164,7 +164,7 @@ if app_mode == "📖 使用說明與 SOP (新手必看)":
         5. **暫不處理：** 頁面、註腳、目錄、封面與文末書目此階段先不要理會。
         """)
         
-        st.subheader("📌 步驟二：透過 Word 結構萃取器轉出 Markdown")
+        st.subheader("📌 步驟二：將粗排過的 Word 檔案，透過 Word 結構萃取器轉出 Markdown")
         st.markdown("""
         1. 點擊左側選單進入 **「1. Word 結構萃取器」**。
         2. 上傳你剛剛寫好的粗排 Word 檔案 (`.docx`)。
@@ -172,11 +172,11 @@ if app_mode == "📖 使用說明與 SOP (新手必看)":
         """)
 
     with col_sop2:
-        st.subheader("📌 步驟三：透過合約與編譯器自動排版")
+        st.subheader("📌 步驟三：透過排版格式樣式與編譯器自動排版")
         st.markdown("""
-        1. 前往 [線上 CSS 合約產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本（如「中原應華碩論」），並複製產生的 **JSON 合約**。
-        2. 依文件性質選擇 **「2. 橫排編譯器」** 或 **「3. 直排編譯器」**。
-        3. 將 JSON 合約貼入左側輸入框，將 Markdown 文本貼入右側輸入框。
+        1. 前往 [線上 CSS 排版格式樣式產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本（如「中原應華碩論」），並複製產生的 **JSON 合約**。
+        2. 依文件性質選擇 **「2. 橫向排版編譯器」** 或 **「3. 直向排版編譯器」**。
+        3. 將 JSON 排版格式樣式貼入左側輸入框，將 Markdown 文本貼入右側輸入框。
         4. 點擊按鈕執行編譯，即可下載排版完美的 Word 核心檔！
         """)
         
