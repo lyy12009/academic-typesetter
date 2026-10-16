@@ -9,15 +9,15 @@ from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.style import WD_STYLE_TYPE
 
-st.set_page_config(page_title="學術排版自動化工具鏈", layout="wide")
+st.set_page_config(page_title="學術排版半自動化工具鏈", layout="wide")
 
 # 側邊欄導航與快捷連結
 st.sidebar.title("🛠️ 學術排版工具選單")
 app_mode = st.sidebar.selectbox("請選擇要使用的工具：", [
     "📖 使用說明與 SOP (新手必看)",
     "1. Word 結構萃取器 (Extractor)",
-    "2. 橫排決定論編譯器 (Horizontal)",
-    "3. 直排決定論編譯器 (Vertical)"
+    "2. 橫向排版編譯器 (Horizontal)",
+    "3. 直向排版編譯器 (Vertical)"
 ])
 
 st.sidebar.markdown("---")
@@ -158,8 +158,8 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
 # 頁面 0：新手必看使用說明與 SOP
 # ==========================================
 if app_mode == "📖 使用說明與 SOP (新手必看)":
-    st.title("🎓 跨維度學術排版自動化系統：操作手冊")
-    st.markdown("本系統透過「關注點分離」與「決定論編譯器」，徹底消除學生在 Word 手動調整格式的無效勞動。")
+    st.title("🎓 學術排版半自動化系統：操作手冊")
+    st.markdown("本系統透過「內容編輯」與「排版格式編譯器」分離，避免在 Word 手動調整格式的無效勞動。")
     
     st.markdown("---")
     col_sop1, col_sop2 = st.columns(2)
@@ -171,7 +171,7 @@ if app_mode == "📖 使用說明與 SOP (新手必看)":
         3. **長引文：** 40字以上引文請在 Word 中套用「引文 (Quote)」樣式。
         """)
     with col_sop2:
-        st.subheader("📌 步驟二與三：萃取與決定論編譯")
+        st.subheader("📌 步驟二與三：萃取與編譯")
         st.markdown("""
         1. 使用 **結構萃取器** 將 Word 轉為 Markdown（長引文會自動帶有 `> `）。
         2. 貼入合約與 Markdown，執行橫排或直排編譯下載 Word。
@@ -182,8 +182,8 @@ if app_mode == "📖 使用說明與 SOP (新手必看)":
 # 模組一：Word 結構萃取器 (含 Quote 萃取)
 # ==========================================
 elif app_mode == "1. Word 結構萃取器 (Extractor)":
-    st.title("📄 Word 結構與清單降維萃取器")
-    st.markdown("將學生的 Word 粗排檔無情剝離視覺雜訊，轉譯為純淨的 Markdown 結構（含大綱、清單與長引文）。")
+    st.title("📄 Word 結構與清單萃取器")
+    st.markdown("將 Word 初級排版檔案轉譯為純淨的 Markdown 結構（含大綱、清單與長引文）。")
     
     uploaded_file = st.file_uploader("請上傳學生的 Word 檔案 (.docx)", type=["docx"])
     
@@ -230,10 +230,10 @@ elif app_mode == "1. Word 結構萃取器 (Extractor)":
 # ==========================================
 # 模組二：橫排決定論編譯器
 # ==========================================
-elif app_mode == "2. 橫排決定論編譯器 (Horizontal)":
-    st.title("📚 橫排決定論編譯器 (Horizontal)")
-    st.markdown("結合 JSON 樣式合約與 Markdown 文本，瞬間生成標準橫排學術 Word 檔。")
-    st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
+elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
+    st.title("📚 橫排編譯器 (Horizontal)")
+    st.markdown("結合 JSON 樣式格式細節與 Markdown 文本，生成標準橫排學術 Word 檔。")
+    st.info("💡 尚未產生 JSON 樣式格式細節嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -243,7 +243,7 @@ elif app_mode == "2. 橫排決定論編譯器 (Horizontal)":
         
     if st.button("🚀 執行橫排編譯", type="primary"):
         if not json_input.strip() or not md_input.strip():
-            st.error("JSON 合約與 Markdown 文本皆不可為空！")
+            st.error("JSON 樣式格式細節與 Markdown 文本皆不可為空！")
         else:
             try:
                 payload = json.loads(json_input)
@@ -263,10 +263,10 @@ elif app_mode == "2. 橫排決定論編譯器 (Horizontal)":
 # ==========================================
 # 模組三：直排決定論編譯器
 # ==========================================
-elif app_mode == "3. 直排決定論編譯器 (Vertical)":
-    st.title("📜 直排決定論編譯器 (Vertical)")
+elif app_mode == "3. 直立排版編譯器 (Vertical)":
+    st.title("📜 直排編譯器 (Vertical)")
     st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
-    st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
+    st.info("💡 尚未產生 JSON 樣式格式細節嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
     with col1:
