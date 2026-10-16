@@ -261,10 +261,10 @@ elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
 
 
 # ==========================================
-# 模組三：直排決定論編譯器 (已修復變數衝突)
+# 模組三：直向排版編譯器 (Vertical) - 已修復條件鍊
 # ==========================================
-if app_mode == "3. 直排決定論編譯器 (Vertical)":
-    st.title("📜 直排決定論編譯器 (Vertical)")
+elif app_mode == "3. 直向排版編譯器 (Vertical)":
+    st.title("📜 直向排版編譯器 (Vertical)")
     st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
     st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
