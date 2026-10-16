@@ -261,33 +261,40 @@ elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
 
 
 # ==========================================
-# 模組三：直排決定論編譯器
+# 模組三：直排決定論編譯器 (已修復變數衝突)
 # ==========================================
-elif app_mode == "3. 直立排版編譯器 (Vertical)":
-    st.title("📜 直排編譯器 (Vertical)")
+if app_mode == "3. 直排決定論編譯器 (Vertical)":
+    st.title("📜 直排決定論編譯器 (Vertical)")
     st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
-    st.info("💡 尚未產生 JSON 樣式格式細節嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
+    st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
     with col1:
-        json_input = st.text_area("1. 貼上 JSON 樣式合約：", height=300)
+        v_json_input = st.text_area("1. 貼上 JSON 樣式合約：", height=300, key="vertical_json_input")
     with col2:
-        md_input = st.text_area("2. 貼上 Markdown 文本：", height=300)
+        v_md_input = st.text_area("2. 貼上 Markdown 文本：", height=300, key="vertical_md_input")
         
-    if st.button("🚀 執行直排編譯", type="primary"):
-        if not json_input.strip() or not md_input.strip():
+    if st.button("🚀 執行直排編譯", type="primary", key="vertical_compile_btn"):
+        if not v_json_input.strip() or not v_md_input.strip():
             st.error("JSON 合約與 Markdown 文本皆不可為空！")
         else:
             try:
-                payload = json.loads(json_input)
+                payload = json.loads(v_json_input)
                 num_sys = payload.get("meta", {}).get("numberingSystem", "chinese")
                 style_contract = payload.get("styles", payload)
-                doc = compile_core(md_input, style_contract, num_sys, is_vertical=True)
+                doc = compile_core(v_md_input, style_contract, num_sys, is_vertical=True)
                 
                 buffer = io.BytesIO()
                 doc.save(buffer)
                 buffer.seek(0)
+                
                 st.success("✅ 直排編譯成功！")
-                st.download_button("📥 下載直排 Word 檔案", data=buffer, file_name="Vertical_Paper.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                st.download_button(
+                    label="📥 下載直排 Word 檔案", 
+                    data=buffer, 
+                    file_name="Vertical_Paper.docx", 
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="vertical_download_btn"
+                )
             except Exception as e:
                 st.error(f"編譯失敗，請檢查 JSON 格式是否正確：{e}")
