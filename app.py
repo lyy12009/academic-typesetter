@@ -27,7 +27,7 @@ st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12
 
 
 # ==========================================
-# 共用編譯核心函式 (含引文 Quote 支援)
+# 共用編譯核心函式 (含 NotebookLM 符號清洗)
 # ==========================================
 def parse_hex_color(hex_str):
     hex_str = hex_str.lstrip('#')
@@ -47,12 +47,11 @@ def inject_style_contract(doc, json_styles):
     style_mappings = {
         "h1": "Heading 1", "h2": "Heading 2", "h3": "Heading 3",
         "body": "Normal", "olist": "Academic OList", "ulist": "Academic UList",
-        "quote": "Quote" # 映射 Word 內建引文樣式
+        "quote": "Quote"
     }
     for json_key, word_style_name in style_mappings.items():
         if json_key not in json_styles and json_key != "quote": continue
         
-        # 若合約沒特別定義 quote，就預設使用 body 的字型大小但取消縮排並左右內縮
         contract = json_styles.get(json_key, json_styles.get("body", {}))
         style_obj = get_or_create_style(doc, word_style_name)
         style_obj.paragraph_format.alignment = get_alignment(contract.get("align", "left"))
@@ -64,7 +63,6 @@ def inject_style_contract(doc, json_styles):
             else:
                 style_obj.paragraph_format.first_line_indent = Pt(0)
         elif json_key == "quote":
-            # 塊狀引文：取消首行縮排，設定左右各內縮 24 點（約 0.85 公分）
             style_obj.paragraph_format.first_line_indent = Pt(0)
             style_obj.paragraph_format.left_indent = Pt(24)
             style_obj.paragraph_format.right_indent = Pt(24)
@@ -98,6 +96,19 @@ def get_numbering_prefix(level, counts, sys_type):
     except IndexError: return ""
     return ""
 
+def clean_notebooklm_markdown(text):
+    """
+    專門用來清洗 NotebookLM 產生的 Markdown 雜訊：
+    1. 移除跳脫斜線 \
+    2. 將 **粗體** 標記轉為乾淨的純文字（或保留語意）
+    """
+    # 移除反斜線跳脫字元 (例如 \*\* 變成 **)
+    text = text.replace(r'\-', '-')
+    text = text.replace(r'\_', '_')
+    text = text.replace(r'\*', '*')
+    text = text.replace('\\', '')
+    return text
+
 def compile_core(md_text, style_contract, num_sys, is_vertical=False):
     doc = docx.Document()
     if is_vertical:
@@ -113,44 +124,49 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
     counts = [0, 0, 0]
     
     for line in md_text.split('\n'):
-        original_line = line 
-        stripped_line = line.strip()
+        original_line = clean_notebooklm_markdown(line)
+        stripped_line = original_line.strip()
         if not stripped_line: continue
+        
+        # 略過 Markdown 表格線與程式碼區塊邊界 (如 ```)
+        if stripped_line.startswith('|') or stripped_line.startswith('```'):
+            continue
         
         match_ul = re.match(r'^(\s*)[-*]\s+(.*)', original_line)
         match_ol = re.match(r'^(\s*)(\d+)\.\s+(.*)', original_line)
         
-        # 🟢 新增：辨識 Markdown 區塊引文 (>)
         if stripped_line.startswith('> '):
-            quote_text = stripped_line.replace('> ', '', 1).strip()
+            quote_text = stripped_line.replace('> ', '', 1).strip().replace('**', '')
             doc.add_paragraph(quote_text, style='Quote')
         elif stripped_line.startswith('### '):
             counts[2] += 1
-            text = stripped_line.replace('### ', '', 1).strip()
+            text = stripped_line.replace('### ', '', 1).strip().replace('**', '')
             doc.add_paragraph(f"{get_numbering_prefix(3, counts, num_sys)}{text}", style='Heading 3')
         elif stripped_line.startswith('## '):
             counts[1] += 1; counts[2] = 0
-            text = stripped_line.replace('## ', '', 1).strip()
+            text = stripped_line.replace('## ', '', 1).strip().replace('**', '')
             doc.add_paragraph(f"{get_numbering_prefix(2, counts, num_sys)}{text}", style='Heading 2')
         elif stripped_line.startswith('# '):
             counts[0] += 1; counts[1] = 0; counts[2] = 0
-            text = stripped_line.replace('# ', '', 1).strip()
+            text = stripped_line.replace('# ', '', 1).strip().replace('**', '')
             doc.add_paragraph(f"{get_numbering_prefix(1, counts, num_sys)}{text}", style='Heading 1')
         elif match_ul:
             spaces = len(match_ul.group(1))
             list_level = spaces // 2
-            text = match_ul.group(2)
+            text = match_ul.group(2).replace('**', '')
             p = doc.add_paragraph(f"• {text}", style='Academic UList')
             p.paragraph_format.left_indent = Pt(24 + (list_level * 18))
         elif match_ol:
             spaces = len(match_ol.group(1))
             list_level = spaces // 2
             num = match_ol.group(2)
-            text = match_ol.group(3)
+            text = match_ol.group(3).replace('**', '')
             p = doc.add_paragraph(f"{num}. {text}", style='Academic OList')
             p.paragraph_format.left_indent = Pt(24 + (list_level * 18))
         else:
-            doc.add_paragraph(stripped_line, style='Normal')
+            # 一般內文順便洗掉粗體符號 ** 確保 Word 排版乾淨
+            clean_body = stripped_line.replace('**', '')
+            doc.add_paragraph(clean_body, style='Normal')
     return doc
 
 
@@ -159,31 +175,30 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
 # ==========================================
 if app_mode == "📖 使用說明與 SOP (新手必看)":
     st.title("🎓 學術排版半自動化系統：操作手冊")
-    st.markdown("本系統透過「內容編輯」與「排版格式編譯器」分離，避免在 Word 手動調整格式的無效勞動。")
+    st.markdown("本系統支援從 Word 萃取或直接貼入 NotebookLM 生成的 Markdown 文本，自動進行決定論編譯。")
     
     st.markdown("---")
     col_sop1, col_sop2 = st.columns(2)
     with col_sop1:
-        st.subheader("📌 步驟一：在 Word 進行極簡結構粗排")
+        st.subheader("📌 步驟一：準備文本")
         st.markdown("""
-        1. **大綱標題：** 使用 Word 內建的「標題一、二、三」。
-        2. **項目清單：** 使用內建的項目符號與編號，按 `Tab` 降階。
-        3. **長引文：** 40字以上引文請在 Word 中套用「引文 (Quote)」樣式。
+        1. **Word 粗排：** 使用內建標題與清單。
+        2. **NotebookLM 匯出：** 可直接將 AI 生成的 `.md` 檔案內容貼入系統（系統會自動清洗跳脫字元）。
         """)
     with col_sop2:
-        st.subheader("📌 步驟二與三：萃取與編譯")
+        st.subheader("📌 步驟二與三：選擇排版方向並編譯")
         st.markdown("""
-        1. 使用 **結構萃取器** 將 Word 轉為 Markdown（長引文會自動帶有 `> `）。
-        2. 貼入合約與 Markdown，執行橫排或直排編譯下載 Word。
+        1. 貼入 JSON 樣式合約與 Markdown 文本。
+        2. 選擇「橫向排版」或「直向排版」一鍵編譯下載。
         """)
 
 
 # ==========================================
-# 模組一：Word 結構萃取器 (含 Quote 萃取)
+# 模組一：Word 結構萃取器 (Extractor)
 # ==========================================
 elif app_mode == "1. Word 結構萃取器 (Extractor)":
     st.title("📄 Word 結構與清單萃取器")
-    st.markdown("將 Word 初級排版檔案轉譯為純淨的 Markdown 結構（含大綱、清單與長引文）。")
+    st.markdown("將 Word 初級排版檔案轉譯為純淨的 Markdown 結構。")
     
     uploaded_file = st.file_uploader("請上傳學生的 Word 檔案 (.docx)", type=["docx"])
     
@@ -198,12 +213,10 @@ elif app_mode == "1. Word 結構萃取器 (Extractor)":
             style_name = para.style.name
             pPr = para._element.pPr
             
-            # 🟢 新增：偵測 Word 的 Quote / 引文樣式，轉譯為 Markdown 的 >
             if 'Quote' in style_name or '引文' in style_name:
                 markdown_lines.append(f"> {text}")
                 continue
                 
-            # 抓取清單 XML 階層
             if pPr is not None and pPr.numPr is not None:
                 ilvl_element = pPr.numPr.ilvl
                 level = int(ilvl_element.val) if ilvl_element is not None else 0
@@ -211,7 +224,6 @@ elif app_mode == "1. Word 結構萃取器 (Extractor)":
                 markdown_lines.append(f"{indent_spaces}- {text}")
                 continue
                 
-            # 抓取標題階層
             if style_name.startswith('Heading') or style_name.startswith('標題'):
                 try:
                     level_str = re.search(r'\d+', style_name)
@@ -228,11 +240,11 @@ elif app_mode == "1. Word 結構萃取器 (Extractor)":
 
 
 # ==========================================
-# 模組二：橫排決定論編譯器
+# 模組二：橫向排版編譯器 (Horizontal)
 # ==========================================
 elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
     st.title("📚 橫排編譯器 (Horizontal)")
-    st.markdown("結合 JSON 樣式格式細節與 Markdown 文本，生成標準橫排學術 Word 檔。")
+    st.markdown("結合 JSON 樣式合約與 Markdown 文本（支援 NotebookLM 原始 MD），生成標準橫排學術 Word 檔。")
     st.info("💡 尚未產生 JSON 樣式格式細節嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
@@ -261,11 +273,11 @@ elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
 
 
 # ==========================================
-# 模組三：直向排版編譯器 (Vertical) - 已修復條件鍊
+# 模組三：直向排版編譯器 (Vertical)
 # ==========================================
 elif app_mode == "3. 直向排版編譯器 (Vertical)":
     st.title("📜 直向排版編譯器 (Vertical)")
-    st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
+    st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向（支援 NotebookLM 原始 MD）。")
     st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
