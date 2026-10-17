@@ -121,35 +121,32 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
             text_direction.set(qn('w:val'), 'tbRl')
             
     inject_style_contract(doc, style_contract)
-    counts = [0, 0, 0]
     
     for line in md_text.split('\n'):
         original_line = clean_notebooklm_markdown(line)
         stripped_line = original_line.strip()
         if not stripped_line: continue
         
-        # 略過 Markdown 表格線與程式碼區塊邊界 (如 ```)
+        # 略過 Markdown 表格線與程式碼區塊邊界
         if stripped_line.startswith('|') or stripped_line.startswith('```'):
             continue
         
         match_ul = re.match(r'^(\s*)[-*]\s+(.*)', original_line)
         match_ol = re.match(r'^(\s*)(\d+)\.\s+(.*)', original_line)
         
+        # 🟢 修正：直接採用 NotebookLM 原生標題文字，不額外加上系統編號前綴，避免重複！
         if stripped_line.startswith('> '):
             quote_text = stripped_line.replace('> ', '', 1).strip().replace('**', '')
             doc.add_paragraph(quote_text, style='Quote')
         elif stripped_line.startswith('### '):
-            counts[2] += 1
             text = stripped_line.replace('### ', '', 1).strip().replace('**', '')
-            doc.add_paragraph(f"{get_numbering_prefix(3, counts, num_sys)}{text}", style='Heading 3')
+            doc.add_paragraph(text, style='Heading 3')
         elif stripped_line.startswith('## '):
-            counts[1] += 1; counts[2] = 0
             text = stripped_line.replace('## ', '', 1).strip().replace('**', '')
-            doc.add_paragraph(f"{get_numbering_prefix(2, counts, num_sys)}{text}", style='Heading 2')
+            doc.add_paragraph(text, style='Heading 2')
         elif stripped_line.startswith('# '):
-            counts[0] += 1; counts[1] = 0; counts[2] = 0
             text = stripped_line.replace('# ', '', 1).strip().replace('**', '')
-            doc.add_paragraph(f"{get_numbering_prefix(1, counts, num_sys)}{text}", style='Heading 1')
+            doc.add_paragraph(text, style='Heading 1')
         elif match_ul:
             spaces = len(match_ul.group(1))
             list_level = spaces // 2
@@ -164,7 +161,6 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
             p = doc.add_paragraph(f"{num}. {text}", style='Academic OList')
             p.paragraph_format.left_indent = Pt(24 + (list_level * 18))
         else:
-            # 一般內文順便洗掉粗體符號 ** 確保 Word 排版乾淨
             clean_body = stripped_line.replace('**', '')
             doc.add_paragraph(clean_body, style='Normal')
     return doc
