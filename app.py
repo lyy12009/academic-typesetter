@@ -27,6 +27,42 @@ st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12
 
 
 # ==========================================
+# 編號前綴對照與生成邏輯
+# ==========================================
+CHINESE_NUMS = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五"]
+CHINESE_FORMAL = ["", "壹", "貳", "參", "肆", "伍", "陸", "柒", "捌", "玖", "拾"]
+
+def get_numbering_prefix(level, counts, sys_type):
+    """依據層級與計數器，動態產出編號前綴"""
+    if sys_type == "none" or not sys_type:
+        return ""
+    
+    c1, c2, c3, c4, c5, c6 = counts
+    try:
+        if sys_type == "chapter":
+            if level == 1: return f"第{CHINESE_NUMS[c1]}章 "
+            if level == 2: return f"第{CHINESE_NUMS[c2]}節 "
+            if level == 3: return f"{CHINESE_NUMS[c3]}、"
+            if level == 4: return f"（{CHINESE_NUMS[c4]}）"
+        elif sys_type == "chinese":
+            if level == 1: return f"{CHINESE_FORMAL[c1]}、"
+            if level == 2: return f"{CHINESE_NUMS[c2]}、"
+            if level == 3: return f"（{CHINESE_NUMS[c3]}）"
+            if level == 4: return f"{c4}. "
+        elif sys_type == "decimal":
+            if level == 1: return f"{c1}. "
+            if level == 2: return f"{c1}.{c2} "
+            if level == 3: return f"{c1}.{c2}.{c3} "
+            if level == 4: return f"{c1}.{c2}.{c3}.{c4} "
+        elif sys_type == "roman":
+            if level == 1: return f"{c1}. "
+            if level == 2: return f"({c2}) "
+    except IndexError:
+        return ""
+    return ""
+
+
+# ==========================================
 # 共用編譯核心函式 (底層 OpenXML 雙層字型鎖死)
 # ==========================================
 def parse_hex_color(hex_str):
@@ -47,13 +83,6 @@ def get_or_create_style(doc, style_name):
     return doc.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
 
 def set_font_force(target_obj, font_name, font_size_pt=None, bold=False, italic=False, color_rgb=None):
-    """
-    【關鍵核心防禦】
-    同時支援 Style 或 Run 物件：
-    1. 強制指定 ascii, hAnsi, eastAsia, cs
-    2. 加入 w:hint="eastAsia"，強制告知 Word 優先採用東亞字型解碼
-    3. 剔除所有 Theme 參照，杜絕 fallback 至 MS Gothic / MS Mincho
-    """
     font = target_obj.font
     font.name = font_name
     if font_size_pt is not None:
@@ -63,14 +92,12 @@ def set_font_force(target_obj, font_name, font_size_pt=None, bold=False, italic=
     if color_rgb is not None:
         font.color.rgb = color_rgb
 
-    # 取得或建立底層 XML rPr 節點
     rPr = font._element.get_or_add_rPr()
     rFonts = rPr.find(qn('w:rFonts'))
     if rFonts is None:
         rFonts = OxmlElement('w:rFonts')
         rPr.append(rFonts)
 
-    # 刪除可能存在的干擾主題屬性
     theme_attrs = [
         'w:asciiTheme', 'w:hAnsiTheme', 'w:eastAsiaTheme', 'w:csTheme',
         'w:cstheme', 'w:fareast'
@@ -79,7 +106,6 @@ def set_font_force(target_obj, font_name, font_size_pt=None, bold=False, italic=
         if qn(attr) in rFonts.attrib:
             del rFonts.attrib[qn(attr)]
 
-    # 寫入明確字型名稱與解碼 Hint
     rFonts.set(qn('w:ascii'), font_name)
     rFonts.set(qn('w:hAnsi'), font_name)
     rFonts.set(qn('w:eastAsia'), font_name)
@@ -120,7 +146,6 @@ def inject_style_contract(doc, json_styles):
 
         font_name = contract.get("font", default_font)
         
-        # 標題預設字級動態計算
         if json_key.startswith("h"):
             lvl = int(json_key.replace("h", ""))
             default_size = max(12, 18 - (lvl * 1.5))
@@ -132,20 +157,13 @@ def inject_style_contract(doc, json_styles):
         is_italic = contract.get("italic", False)
         rgb_color = parse_hex_color(contract.get("color", "#000000"))
 
-        # 第一層鎖死：寫入 Style 層
         set_font_force(style_obj, font_name, font_size, bold=is_bold, italic=is_italic, color_rgb=rgb_color)
 
 def add_styled_paragraph(doc, text, style_name, style_contract):
-    """
-    【第二層鎖死：實體 Run 層級直寫】
-    除了套用 Word 樣式外，在段落的第一個 Run 上再次注入東亞字型標籤，
-    徹底阻斷 Word 樣式繼承失效或佈景主題 fallback。
-    """
     p = doc.add_paragraph(style=style_name)
     if text:
         run = p.add_run(text)
         
-        # 尋找對應的 JSON 設定值
         style_key_map = {
             "Heading 1": "h1", "Heading 2": "h2", "Heading 3": "h3",
             "Heading 4": "h4", "Heading 5": "h5", "Heading 6": "h6",
@@ -189,8 +207,10 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
                 sectPr.append(text_direction)
             text_direction.set(qn('w:val'), 'tbRl')
             
-    # 注入樣式定義 (第一層)
     inject_style_contract(doc, style_contract)
+    
+    # 階層計數器狀態機
+    counts = [0, 0, 0, 0, 0, 0]
     
     for line in md_text.split('\n'):
         original_line = clean_notebooklm_markdown(line)
@@ -204,28 +224,21 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
         match_ul = re.match(r'^(\s*)[-*]\s+(.*)', original_line)
         match_ol = re.match(r'^(\s*)(\d+)\.\s+(.*)', original_line)
         
-        # 標題 1 到 6 與引文解析 (雙層鎖死調用)
         if stripped_line.startswith('> '):
             quote_text = stripped_line.replace('> ', '', 1).strip().replace('**', '')
             add_styled_paragraph(doc, quote_text, 'Quote', style_contract)
-        elif stripped_line.startswith('###### '):
-            text = stripped_line.replace('###### ', '', 1).strip().replace('**', '')
-            add_styled_paragraph(doc, text, 'Heading 6', style_contract)
-        elif stripped_line.startswith('##### '):
-            text = stripped_line.replace('##### ', '', 1).strip().replace('**', '')
-            add_styled_paragraph(doc, text, 'Heading 5', style_contract)
-        elif stripped_line.startswith('#### '):
-            text = stripped_line.replace('#### ', '', 1).strip().replace('**', '')
-            add_styled_paragraph(doc, text, 'Heading 4', style_contract)
-        elif stripped_line.startswith('### '):
-            text = stripped_line.replace('### ', '', 1).strip().replace('**', '')
-            add_styled_paragraph(doc, text, 'Heading 3', style_contract)
-        elif stripped_line.startswith('## '):
-            text = stripped_line.replace('## ', '', 1).strip().replace('**', '')
-            add_styled_paragraph(doc, text, 'Heading 2', style_contract)
-        elif stripped_line.startswith('# '):
-            text = stripped_line.replace('# ', '', 1).strip().replace('**', '')
-            add_styled_paragraph(doc, text, 'Heading 1', style_contract)
+        elif stripped_line.startswith('#'):
+            level = len(stripped_line) - len(stripped_line.lstrip('#'))
+            level = min(level, 6)
+            raw_text = stripped_line.lstrip('#').strip().replace('**', '')
+            
+            counts[level - 1] += 1
+            for idx in range(level, 6):
+                counts[idx] = 0
+                
+            prefix = get_numbering_prefix(level, counts, num_sys)
+            final_heading_text = f"{prefix}{raw_text}"
+            add_styled_paragraph(doc, final_heading_text, f'Heading {level}', style_contract)
         elif match_ul:
             spaces = len(match_ul.group(1))
             list_level = spaces // 2
@@ -321,7 +334,7 @@ elif app_mode == "1. Word 結構萃取器 (Extractor)":
 # ==========================================
 elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
     st.title("📚 橫排編譯器 (Horizontal)")
-    st.markdown("結合 JSON 樣式合約與 Markdown 文本，生成標準橫排學術 Word 檔（已套用 Run 層級東亞字型鎖定）。")
+    st.markdown("結合 JSON 樣式合約與 Markdown 文本，生成標準橫排學術 Word 檔（已套用字型鎖定與自動階層編號）。")
     st.info("💡 尚未產生 JSON 樣式格式細節嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
@@ -343,7 +356,7 @@ elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
                 buffer = io.BytesIO()
                 doc.save(buffer)
                 buffer.seek(0)
-                st.success("✅ 橫排編譯成功！字型已全面鎖定。")
+                st.success("✅ 橫排編譯成功！字型與編號已完成處理。")
                 st.download_button("📥 下載橫排 Word 檔案", data=buffer, file_name="Horizontal_Paper.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
             except Exception as e:
                 st.error(f"編譯失敗，請檢查 JSON 格式是否正確：{e}")
@@ -377,7 +390,7 @@ elif app_mode == "3. 直向排版編譯器 (Vertical)":
                 doc.save(buffer)
                 buffer.seek(0)
                 
-                st.success("✅ 直排編譯器編譯成功！字型已全面鎖定。")
+                st.success("✅ 直排編譯器編譯成功！字型與編號已完成處理。")
                 st.download_button(
                     label="📥 下載直排 Word 檔案", 
                     data=buffer, 
