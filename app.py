@@ -27,7 +27,7 @@ st.sidebar.markdown("[👉 點擊開啟線上 CSS 合約產生器](https://lyy12
 
 
 # ==========================================
-# 共用編譯核心函式 (含 NotebookLM 符號清洗)
+# 共用編譯核心函式 (含字型強制鎖定與層級擴充)
 # ==========================================
 def parse_hex_color(hex_str):
     hex_str = hex_str.lstrip('#')
@@ -43,23 +43,51 @@ def get_or_create_style(doc, style_name):
     if style_name in doc.styles: return doc.styles[style_name]
     return doc.styles.add_style(style_name, WD_STYLE_TYPE.PARAGRAPH)
 
+def set_font_force(font, font_name, font_size_pt=None, bold=False, italic=False, color_rgb=None):
+    """
+    【關鍵防禦】從底層 XML 同時鎖定西文與東亞字型，徹底杜絕 Word 自動 fallback 變成 MS Gothic。
+    """
+    font.name = font_name
+    if font_size_pt:
+        font.size = Pt(font_size_pt)
+    font.bold = bold
+    font.italic = italic
+    if color_rgb:
+        font.color.rgb = color_rgb
+    
+    rPr = font._element.get_or_add_rPr()
+    rFonts = rPr.find(qn('w:rFonts'))
+    if rFonts is None:
+        rFonts = OxmlElement('w:rFonts')
+        rPr.append(rFonts)
+    
+    rFonts.set(qn('w:ascii'), font_name)
+    rFonts.set(qn('w:hAnsi'), font_name)
+    rFonts.set(qn('w:fareast'), font_name)
+
 def inject_style_contract(doc, json_styles):
+    # 支援到 Heading 1 ~ Heading 6 的動態對應
     style_mappings = {
         "h1": "Heading 1", "h2": "Heading 2", "h3": "Heading 3",
+        "h4": "Heading 4", "h5": "Heading 5", "h6": "Heading 6",
         "body": "Normal", "olist": "Academic OList", "ulist": "Academic UList",
         "quote": "Quote"
     }
+    
+    body_contract = json_styles.get("body", {"size": 12, "font": "標楷體"})
+    default_font = body_contract.get("font", "標楷體")
+
     for json_key, word_style_name in style_mappings.items():
-        if json_key not in json_styles and json_key != "quote": continue
+        contract = json_styles.get(json_key, body_contract if json_key != "quote" else {})
+        if not contract and json_key not in ["body", "quote"]: continue
         
-        contract = json_styles.get(json_key, json_styles.get("body", {}))
         style_obj = get_or_create_style(doc, word_style_name)
         style_obj.paragraph_format.alignment = get_alignment(contract.get("align", "left"))
         
         if json_key == "body":
-            indent_chars = contract.get("indent", 0)
+            indent_chars = contract.get("indent", 2)
             if indent_chars > 0:
-                style_obj.paragraph_format.first_line_indent = Pt(indent_chars * contract.get("size", 13))
+                style_obj.paragraph_format.first_line_indent = Pt(indent_chars * contract.get("size", 12))
             else:
                 style_obj.paragraph_format.first_line_indent = Pt(0)
         elif json_key == "quote":
@@ -69,40 +97,15 @@ def inject_style_contract(doc, json_styles):
         else:
             style_obj.paragraph_format.first_line_indent = Pt(0)
             
-        font = style_obj.font
-        font.size = Pt(contract.get("size", 12))
-        font.bold = contract.get("bold", False)
-        font.italic = contract.get("italic", False)
-        font.color.rgb = parse_hex_color(contract.get("color", "#000000"))
-        font_name = contract.get("font", "標楷體")
-        font.name = font_name
-        font.element.rPr.rFonts.set(qn('w:eastAsia'), font_name)
+        font_name = contract.get("font", default_font)
+        font_size = contract.get("size", 12 if "body" in json_key else max(12, 18 - (int(json_key.replace("h","")) * 2) if json_key.startswith("h") else 14))
+        is_bold = contract.get("bold", True if json_key.startswith("h") else False)
+        is_italic = contract.get("italic", False)
+        rgb_color = parse_hex_color(contract.get("color", "#000000"))
 
-CHINESE_NUMS = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"]
-CHINESE_FORMAL = ["", "壹", "貳", "參", "肆", "伍", "陸", "柒", "捌", "玖", "拾"]
-
-def get_numbering_prefix(level, counts, sys_type):
-    c1, c2, c3 = counts
-    if sys_type == "none" or not sys_type: return ""
-    try:
-        if sys_type == "chinese":
-            if level == 1: return f"{CHINESE_FORMAL[c1]}、"
-            if level == 2: return f"{CHINESE_NUMS[c2]}、"
-            if level == 3: return f"（{CHINESE_NUMS[c3]}）"
-        elif sys_type == "decimal":
-            if level == 1: return f"{c1}. "
-            if level == 2: return f"{c1}.{c2} "
-            if level == 3: return f"{c1}.{c2}.{c3} "
-    except IndexError: return ""
-    return ""
+        set_font_force(style_obj.font, font_name, font_size, bold=is_bold, italic=is_italic, color_rgb=rgb_color)
 
 def clean_notebooklm_markdown(text):
-    """
-    專門用來清洗 NotebookLM 產生的 Markdown 雜訊：
-    1. 移除跳脫斜線 \
-    2. 將 **粗體** 標記轉為乾淨的純文字（或保留語意）
-    """
-    # 移除反斜線跳脫字元 (例如 \*\* 變成 **)
     text = text.replace(r'\-', '-')
     text = text.replace(r'\_', '_')
     text = text.replace(r'\*', '*')
@@ -127,17 +130,25 @@ def compile_core(md_text, style_contract, num_sys, is_vertical=False):
         stripped_line = original_line.strip()
         if not stripped_line: continue
         
-        # 略過 Markdown 表格線與程式碼區塊邊界
         if stripped_line.startswith('|') or stripped_line.startswith('```'):
             continue
         
         match_ul = re.match(r'^(\s*)[-*]\s+(.*)', original_line)
         match_ol = re.match(r'^(\s*)(\d+)\.\s+(.*)', original_line)
         
-        # 🟢 修正：直接採用 NotebookLM 原生標題文字，不額外加上系統編號前綴，避免重複！
+        # 支援 Heading 1 到 Heading 6 的 Markdown 解析
         if stripped_line.startswith('> '):
             quote_text = stripped_line.replace('> ', '', 1).strip().replace('**', '')
             doc.add_paragraph(quote_text, style='Quote')
+        elif stripped_line.startswith('###### '):
+            text = stripped_line.replace('###### ', '', 1).strip().replace('**', '')
+            doc.add_paragraph(text, style='Heading 6')
+        elif stripped_line.startswith('##### '):
+            text = stripped_line.replace('##### ', '', 1).strip().replace('**', '')
+            doc.add_paragraph(text, style='Heading 5')
+        elif stripped_line.startswith('#### '):
+            text = stripped_line.replace('#### ', '', 1).strip().replace('**', '')
+            doc.add_paragraph(text, style='Heading 4')
         elif stripped_line.startswith('### '):
             text = stripped_line.replace('### ', '', 1).strip().replace('**', '')
             doc.add_paragraph(text, style='Heading 3')
@@ -178,8 +189,8 @@ if app_mode == "📖 使用說明與 SOP (新手必看)":
     with col_sop1:
         st.subheader("📌 步驟一：準備文本")
         st.markdown("""
-        1. **Word 粗排：** 使用內建標題與清單。
-        2. **NotebookLM 匯出：** 可直接將 AI 生成的 `.md` 檔案內容貼入系統（系統會自動清洗跳脫字元）。
+        1. **Word 粗排：** 使用內建標題（Heading 1-6）與清單。
+        2. **NotebookLM 匯出：** 可直接將 AI 生成的 Markdown 貼入系統。
         """)
     with col_sop2:
         st.subheader("📌 步驟二與三：選擇排版方向並編譯")
@@ -240,7 +251,7 @@ elif app_mode == "1. Word 結構萃取器 (Extractor)":
 # ==========================================
 elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
     st.title("📚 橫排編譯器 (Horizontal)")
-    st.markdown("結合 JSON 樣式合約與 Markdown 文本（支援 NotebookLM 原始 MD），生成標準橫排學術 Word 檔。")
+    st.markdown("結合 JSON 樣式合約與 Markdown 文本，生成標準橫排學術 Word 檔（已內建字型強制鎖定）。")
     st.info("💡 尚未產生 JSON 樣式格式細節嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
@@ -273,7 +284,7 @@ elif app_mode == "2. 橫向排版編譯器 (Horizontal)":
 # ==========================================
 elif app_mode == "3. 直向排版編譯器 (Vertical)":
     st.title("📜 直向排版編譯器 (Vertical)")
-    st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向（支援 NotebookLM 原始 MD）。")
+    st.markdown("專為古典文學、方志與漢語音韻研究設計，自動在 XML 底層注入 `tbRl` 直書流向。")
     st.info("💡 尚未產生 JSON 合約嗎？請先至 [線上 CSS 產生器](https://lyy12009.github.io/EssayFormatting/) 挑選範本並複製 JSON。")
     
     col1, col2 = st.columns(2)
@@ -296,7 +307,7 @@ elif app_mode == "3. 直向排版編譯器 (Vertical)":
                 doc.save(buffer)
                 buffer.seek(0)
                 
-                st.success("✅ 直排編譯成功！")
+                st.success("✅ 直排編譯器編譯成功！")
                 st.download_button(
                     label="📥 下載直排 Word 檔案", 
                     data=buffer, 
